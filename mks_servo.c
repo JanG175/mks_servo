@@ -452,7 +452,9 @@ int32_t mks_servo_uart_read_pulses(mks_conf_t mks_config, uint8_t address)
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
+
         if (abort_on == true)
+            abort();
     }
 
     int32_t pulses = response[3] << 24 | response[4] << 16 | response[5] << 8 | response[6];
