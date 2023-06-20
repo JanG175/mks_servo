@@ -11,6 +11,8 @@
 
 #define MKS_SERVO_N 1 // declare how many motors do you want to use
 
+static bool abort_on = true; // if true - abort on UART read timeout
+
 
 static portMUX_TYPE spinlock = portMUX_INITIALIZER_UNLOCKED;
 
@@ -398,7 +400,9 @@ float mks_servo_uart_read_encoder(mks_conf_t mks_config, uint8_t address)
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     int32_t carry = response[3] << 24 | response[4] << 16 | response[5] << 8 | response[6];
@@ -448,7 +452,7 @@ int32_t mks_servo_uart_read_pulses(mks_conf_t mks_config, uint8_t address)
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+        if (abort_on == true)
     }
 
     int32_t pulses = response[3] << 24 | response[4] << 16 | response[5] << 8 | response[6];
@@ -496,7 +500,9 @@ int16_t mks_servo_uart_read_motor_shaft_error(mks_conf_t mks_config, uint8_t add
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     int16_t shaft_error = response[3] << 8 | response[4];
@@ -543,7 +549,9 @@ uint8_t mks_servo_uart_read_enable(mks_conf_t mks_config, uint8_t address)
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -588,7 +596,9 @@ uint8_t mks_servo_uart_read_go_to_zero_status(mks_conf_t mks_config, uint8_t add
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -633,7 +643,9 @@ uint8_t mks_servo_uart_release_protection_state(mks_conf_t mks_config, uint8_t a
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -678,7 +690,9 @@ uint8_t mks_servo_uart_read_protection_state(mks_conf_t mks_config, uint8_t addr
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -724,7 +738,9 @@ uint8_t mks_servo_uart_calibrate_encoder(mks_conf_t mks_config, uint8_t address)
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -771,7 +787,9 @@ uint8_t mks_servo_uart_set_work_mode(mks_conf_t mks_config, uint8_t address, uin
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -824,7 +842,9 @@ uint8_t mks_servo_uart_set_current(mks_conf_t mks_config, uint8_t address, uint8
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -871,7 +891,9 @@ uint8_t mks_servo_uart_set_mstep(mks_conf_t mks_config, uint8_t address, uint8_t
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -918,7 +940,9 @@ uint8_t mks_servo_uart_set_enable(mks_conf_t mks_config, uint8_t address, uint8_
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -965,7 +989,9 @@ uint8_t mks_servo_uart_set_dir(mks_conf_t mks_config, uint8_t address, uint8_t d
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -1012,7 +1038,9 @@ uint8_t mks_servo_uart_set_shaft_protection(mks_conf_t mks_config, uint8_t addre
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -1059,7 +1087,9 @@ uint8_t mks_servo_uart_set_mplyer(mks_conf_t mks_config, uint8_t address, uint8_
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -1106,7 +1136,9 @@ uint8_t mks_servo_uart_set_baud_rate(mks_conf_t mks_config, uint8_t address, uin
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -1153,7 +1185,9 @@ uint8_t mks_servo_uart_set_slave_address(mks_conf_t mks_config, uint8_t address,
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -1200,7 +1234,9 @@ uint8_t mks_servo_uart_set_slave_respond(mks_conf_t mks_config, uint8_t address,
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -1246,7 +1282,9 @@ uint8_t mks_servo_uart_restore(mks_conf_t mks_config, uint8_t address)
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -1291,7 +1329,9 @@ uint8_t mks_servo_uart_cr_query(mks_conf_t mks_config, uint8_t address)
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -1338,7 +1378,9 @@ uint8_t mks_servo_uart_cr_enable(mks_conf_t mks_config, uint8_t address, uint8_t
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -1411,7 +1453,9 @@ uint8_t mks_servo_uart_cr_run_w_speed(mks_conf_t mks_config, uint8_t address, in
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -1457,7 +1501,9 @@ uint8_t mks_servo_uart_cr_save_params(mks_conf_t mks_config, uint8_t address)
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -1503,7 +1549,9 @@ uint8_t mks_servo_uart_cr_clear_params(mks_conf_t mks_config, uint8_t address)
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
@@ -1581,7 +1629,9 @@ uint8_t mks_servo_uart_cr_set_pos(mks_conf_t mks_config, uint8_t address, int16_
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
         ESP_LOGE(TAG, "UART read timeout");
-        abort();
+
+        if (abort_on == true)
+            abort();
     }
 
     return response[3];
