@@ -93,9 +93,7 @@ static void mks_servo_uart_recv(mks_conf_t mks_config, uint8_t* datagram, uint8_
     if (buf == len)
     {
         for (int i = 0; i < buf; i++)
-        {
             datagram[i] = data[i];
-        }
     }
     else
     {
@@ -408,7 +406,7 @@ float mks_servo_uart_read_encoder(mks_conf_t mks_config, uint8_t address)
     int32_t carry = response[3] << 24 | response[4] << 16 | response[5] << 8 | response[6];
     uint16_t value = response[7] << 8 | response[8];
 
-    float encoder_value = (float)carry * 360.0f + (float)value / 65535.0f * 360.0f;
+    float encoder_value = (float)carry * (float)0x3FFF + (float)value;
 
     return encoder_value;
 }
@@ -1446,6 +1444,9 @@ uint8_t mks_servo_uart_cr_run_w_speed(mks_conf_t mks_config, uint8_t address, in
 
     uint32_t cnt = 0;
 
+    if (speed == 0)
+        return 2;
+
     do
     {
         mks_servo_uart_recv(mks_config, response, len_r);
@@ -1572,7 +1573,7 @@ uint8_t mks_servo_uart_cr_clear_params(mks_conf_t mks_config, uint8_t address)
  */
 uint8_t mks_servo_uart_cr_set_pos(mks_conf_t mks_config, uint8_t address, int16_t speed, uint8_t accel, uint32_t pulses)
 {
-        if (speed > 1600)
+    if (speed > 1600)
     {
         ESP_LOGW(TAG, "speed is too high, set to 1600");
         speed = 1600;
@@ -1620,21 +1621,29 @@ uint8_t mks_servo_uart_cr_set_pos(mks_conf_t mks_config, uint8_t address, int16_
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
+    // wait until motor stops
+    uint32_t buf = 0;
 
-    do
+    while (1)
     {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
+        buf = uart_read_bytes(mks_config.uart, response, len_r, portMAX_DELAY);
+        uart_flush(mks_config.uart);
 
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
+        if (buf == len_r)
+        {
+            if (response[0] == MKS_DOWNLINK_HEAD && response[1] == address && response[2] == MKS_CR_UART_MOTOR_RUN)
+            {
+                if (response[3] == 2)
+                    return response[3];
+                else if (response[3] == 1)
+                    continue;
+                else
+                    ESP_LOGE(TAG, "UART read error - move not ended");
+            }
+        }
+        else
+            ESP_LOGE(TAG, "UART read error");
     }
 
-    return response[3];
+    return 0;
 }
