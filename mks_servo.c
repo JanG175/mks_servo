@@ -11,8 +11,9 @@
 
 #define MKS_SERVO_N 1 // declare how many motors do you want to use
 
-static bool abort_on = true; // if true - abort on UART read timeout
+// #define MKS_PC_RETURN 1 // define if you want to return message to PC
 
+static bool abort_on = true; // if true - abort on UART read timeout
 
 static portMUX_TYPE spinlock = portMUX_INITIALIZER_UNLOCKED;
 
@@ -106,6 +107,34 @@ static void mks_servo_uart_recv(mks_conf_t mks_config, uint8_t* datagram, uint8_
 
 
 /**
+ * @brief check if UART response is correct
+ * 
+ * @param mks_config struct with MKS connection parameters
+ * @param address MKS slave address
+ * @param response pointer to response datagram
+ * @param len_r length of response datagram
+ */
+static void mks_servo_uart_recv_check(mks_conf_t mks_config, uint8_t address, uint8_t* response, uint8_t len_r)
+{
+    uint32_t cnt = 0;
+
+    do
+    {
+        mks_servo_uart_recv(mks_config, response, len_r);
+        cnt++;
+    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address || mks_servo_uart_check_CRC(response, len_r) == false) && (cnt < MKS_UART_MAX_REPEAT));
+
+    if (cnt >= MKS_UART_MAX_REPEAT)
+    {
+        ESP_LOGE(TAG, "UART read timeout");
+
+        if (abort_on == true)
+            abort();
+    }
+}
+
+
+/**
  * @brief callback function for timers
  * 
  * @param timer timer handle
@@ -113,7 +142,7 @@ static void mks_servo_uart_recv(mks_conf_t mks_config, uint8_t* datagram, uint8_
  * @param user_ctx user context
  * @return true - if high priority task was woken up; false - otherwise
  */
-static bool clk_timer_callback(gptimer_handle_t timer, const gptimer_alarm_event_data_t* edata, void* user_ctx)
+static bool mks_servo_clk_timer_callback(gptimer_handle_t timer, const gptimer_alarm_event_data_t* edata, void* user_ctx)
 {
     BaseType_t high_task_awoken = pdFALSE;
 
@@ -200,7 +229,7 @@ void mks_servo_init(mks_conf_t mks_config)
         ESP_ERROR_CHECK(gptimer_set_alarm_action(gptimer[i], &alarm_config));
 
         gptimer_event_callbacks_t timer_cbs = {
-            .on_alarm = clk_timer_callback
+            .on_alarm = mks_servo_clk_timer_callback
         };
 
         cb_arg[i].step_pin = mks_config.step_pin[i];
@@ -387,21 +416,7 @@ float mks_servo_uart_read_encoder(mks_conf_t mks_config, uint8_t address)
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     int32_t carry = response[3] << 24 | response[4] << 16 | response[5] << 8 | response[6];
     uint16_t value = response[7] << 8 | response[8];
@@ -439,21 +454,7 @@ int32_t mks_servo_uart_read_pulses(mks_conf_t mks_config, uint8_t address)
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     int32_t pulses = response[3] << 24 | response[4] << 16 | response[5] << 8 | response[6];
 
@@ -489,21 +490,7 @@ int16_t mks_servo_uart_read_motor_shaft_error(mks_conf_t mks_config, uint8_t add
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     int16_t shaft_error = response[3] << 8 | response[4];
 
@@ -538,21 +525,7 @@ uint8_t mks_servo_uart_read_enable(mks_conf_t mks_config, uint8_t address)
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
 }
@@ -585,21 +558,7 @@ uint8_t mks_servo_uart_read_go_to_zero_status(mks_conf_t mks_config, uint8_t add
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
 }
@@ -616,14 +575,17 @@ uint8_t mks_servo_uart_release_protection_state(mks_conf_t mks_config, uint8_t a
 {
     uint8_t len_w = 4;
     uint8_t datagram[len_w];
-    uint8_t len_r = 5;
-    uint8_t response[len_r];
 
     for (uint32_t i = 0; i < len_w; i++)
         datagram[i] = 0;
 
+#ifdef MKS_PC_RETURN
+    uint8_t len_r = 5;
+    uint8_t response[len_r];
+
     for (uint32_t i = 0; i < len_r; i++)
         response[i] = 0;
+#endif
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
@@ -632,23 +594,13 @@ uint8_t mks_servo_uart_release_protection_state(mks_conf_t mks_config, uint8_t a
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+#ifdef MKS_PC_RETURN
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
+#endif
+
+    return 1;
 }
 
 
@@ -679,21 +631,7 @@ uint8_t mks_servo_uart_read_protection_state(mks_conf_t mks_config, uint8_t addr
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
 }
@@ -710,14 +648,17 @@ uint8_t mks_servo_uart_calibrate_encoder(mks_conf_t mks_config, uint8_t address)
 {
     uint8_t len_w = 5;
     uint8_t datagram[len_w];
-    uint8_t len_r = 5;
-    uint8_t response[len_r];
 
     for (uint32_t i = 0; i < len_w; i++)
         datagram[i] = 0;
 
+#ifdef MKS_PC_RETURN
+    uint8_t len_r = 5;
+    uint8_t response[len_r];
+
     for (uint32_t i = 0; i < len_r; i++)
         response[i] = 0;
+#endif
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
@@ -727,23 +668,16 @@ uint8_t mks_servo_uart_calibrate_encoder(mks_conf_t mks_config, uint8_t address)
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
+    // wait for 30 sec for encoder to calibrate
+    vTaskDelay(30000 / portTICK_PERIOD_MS);
 
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+#ifdef MKS_PC_RETURN
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
+#endif
+
+    return 1;
 }
 
 
@@ -759,14 +693,17 @@ uint8_t mks_servo_uart_set_work_mode(mks_conf_t mks_config, uint8_t address, uin
 {
     uint8_t len_w = 5;
     uint8_t datagram[len_w];
-    uint8_t len_r = 5;
-    uint8_t response[len_r];
 
     for (uint32_t i = 0; i < len_w; i++)
         datagram[i] = 0;
 
+#ifdef MKS_PC_RETURN
+    uint8_t len_r = 5;
+    uint8_t response[len_r];
+
     for (uint32_t i = 0; i < len_r; i++)
         response[i] = 0;
+#endif
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
@@ -776,23 +713,13 @@ uint8_t mks_servo_uart_set_work_mode(mks_conf_t mks_config, uint8_t address, uin
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+#ifdef MKS_PC_RETURN
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
+#endif
+
+    return 1;
 }
 
 
@@ -814,14 +741,17 @@ uint8_t mks_servo_uart_set_current(mks_conf_t mks_config, uint8_t address, uint8
 
     uint8_t len_w = 5;
     uint8_t datagram[len_w];
-    uint8_t len_r = 5;
-    uint8_t response[len_r];
 
     for (uint32_t i = 0; i < len_w; i++)
         datagram[i] = 0;
 
+#ifdef MKS_PC_RETURN
+    uint8_t len_r = 5;
+    uint8_t response[len_r];
+
     for (uint32_t i = 0; i < len_r; i++)
         response[i] = 0;
+#endif
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
@@ -831,23 +761,13 @@ uint8_t mks_servo_uart_set_current(mks_conf_t mks_config, uint8_t address, uint8
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+#ifdef MKS_PC_RETURN
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
+#endif
+
+    return 1;
 }
 
 
@@ -863,14 +783,17 @@ uint8_t mks_servo_uart_set_mstep(mks_conf_t mks_config, uint8_t address, uint8_t
 {
     uint8_t len_w = 5;
     uint8_t datagram[len_w];
-    uint8_t len_r = 5;
-    uint8_t response[len_r];
 
     for (uint32_t i = 0; i < len_w; i++)
         datagram[i] = 0;
 
+#ifdef MKS_PC_RETURN
+    uint8_t len_r = 5;
+    uint8_t response[len_r];
+
     for (uint32_t i = 0; i < len_r; i++)
         response[i] = 0;
+#endif
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
@@ -880,23 +803,13 @@ uint8_t mks_servo_uart_set_mstep(mks_conf_t mks_config, uint8_t address, uint8_t
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+#ifdef MKS_PC_RETURN
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
+#endif
+
+    return 1;
 }
 
 
@@ -912,14 +825,17 @@ uint8_t mks_servo_uart_set_enable(mks_conf_t mks_config, uint8_t address, uint8_
 {
     uint8_t len_w = 5;
     uint8_t datagram[len_w];
-    uint8_t len_r = 5;
-    uint8_t response[len_r];
 
     for (uint32_t i = 0; i < len_w; i++)
         datagram[i] = 0;
 
+#ifdef MKS_PC_RETURN
+    uint8_t len_r = 5;
+    uint8_t response[len_r];
+
     for (uint32_t i = 0; i < len_r; i++)
         response[i] = 0;
+#endif
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
@@ -929,23 +845,13 @@ uint8_t mks_servo_uart_set_enable(mks_conf_t mks_config, uint8_t address, uint8_
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+#ifdef MKS_PC_RETURN
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
+#endif
+
+    return 1;
 }
 
 
@@ -961,14 +867,17 @@ uint8_t mks_servo_uart_set_dir(mks_conf_t mks_config, uint8_t address, uint8_t d
 {
     uint8_t len_w = 5;
     uint8_t datagram[len_w];
-    uint8_t len_r = 5;
-    uint8_t response[len_r];
 
     for (uint32_t i = 0; i < len_w; i++)
         datagram[i] = 0;
 
+#ifdef MKS_PC_RETURN
+    uint8_t len_r = 5;
+    uint8_t response[len_r];
+
     for (uint32_t i = 0; i < len_r; i++)
         response[i] = 0;
+#endif
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
@@ -978,23 +887,13 @@ uint8_t mks_servo_uart_set_dir(mks_conf_t mks_config, uint8_t address, uint8_t d
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+#ifdef MKS_PC_RETURN
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
+#endif
+
+    return 1;
 }
 
 
@@ -1010,14 +909,17 @@ uint8_t mks_servo_uart_set_shaft_protection(mks_conf_t mks_config, uint8_t addre
 {
     uint8_t len_w = 5;
     uint8_t datagram[len_w];
-    uint8_t len_r = 5;
-    uint8_t response[len_r];
 
     for (uint32_t i = 0; i < len_w; i++)
         datagram[i] = 0;
 
+#ifdef MKS_PC_RETURN
+    uint8_t len_r = 5;
+    uint8_t response[len_r];
+
     for (uint32_t i = 0; i < len_r; i++)
         response[i] = 0;
+#endif
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
@@ -1027,23 +929,13 @@ uint8_t mks_servo_uart_set_shaft_protection(mks_conf_t mks_config, uint8_t addre
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+#ifdef MKS_PC_RETURN
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
+#endif
+
+    return 1;
 }
 
 
@@ -1059,14 +951,17 @@ uint8_t mks_servo_uart_set_mplyer(mks_conf_t mks_config, uint8_t address, uint8_
 {
     uint8_t len_w = 5;
     uint8_t datagram[len_w];
-    uint8_t len_r = 5;
-    uint8_t response[len_r];
 
     for (uint32_t i = 0; i < len_w; i++)
         datagram[i] = 0;
 
+#ifdef MKS_PC_RETURN
+    uint8_t len_r = 5;
+    uint8_t response[len_r];
+
     for (uint32_t i = 0; i < len_r; i++)
         response[i] = 0;
+#endif
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
@@ -1076,23 +971,13 @@ uint8_t mks_servo_uart_set_mplyer(mks_conf_t mks_config, uint8_t address, uint8_
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+#ifdef MKS_PC_RETURN
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
+#endif
+
+    return 1;
 }
 
 
@@ -1108,14 +993,17 @@ uint8_t mks_servo_uart_set_baud_rate(mks_conf_t mks_config, uint8_t address, uin
 {
     uint8_t len_w = 5;
     uint8_t datagram[len_w];
-    uint8_t len_r = 5;
-    uint8_t response[len_r];
 
     for (uint32_t i = 0; i < len_w; i++)
         datagram[i] = 0;
 
+#ifdef MKS_PC_RETURN
+    uint8_t len_r = 5;
+    uint8_t response[len_r];
+
     for (uint32_t i = 0; i < len_r; i++)
         response[i] = 0;
+#endif
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
@@ -1125,23 +1013,13 @@ uint8_t mks_servo_uart_set_baud_rate(mks_conf_t mks_config, uint8_t address, uin
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+#ifdef MKS_PC_RETURN
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
+#endif
+
+    return 1;
 }
 
 
@@ -1157,14 +1035,17 @@ uint8_t mks_servo_uart_set_slave_address(mks_conf_t mks_config, uint8_t address,
 {
     uint8_t len_w = 5;
     uint8_t datagram[len_w];
-    uint8_t len_r = 5;
-    uint8_t response[len_r];
 
     for (uint32_t i = 0; i < len_w; i++)
         datagram[i] = 0;
 
+#ifdef MKS_PC_RETURN
+    uint8_t len_r = 5;
+    uint8_t response[len_r];
+
     for (uint32_t i = 0; i < len_r; i++)
         response[i] = 0;
+#endif
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
@@ -1174,23 +1055,13 @@ uint8_t mks_servo_uart_set_slave_address(mks_conf_t mks_config, uint8_t address,
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+#ifdef MKS_PC_RETURN
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
+#endif
+
+    return 1;
 }
 
 
@@ -1206,14 +1077,17 @@ uint8_t mks_servo_uart_set_slave_respond(mks_conf_t mks_config, uint8_t address,
 {
     uint8_t len_w = 5;
     uint8_t datagram[len_w];
-    uint8_t len_r = 5;
-    uint8_t response[len_r];
 
     for (uint32_t i = 0; i < len_w; i++)
         datagram[i] = 0;
 
+#ifdef MKS_PC_RETURN
+    uint8_t len_r = 5;
+    uint8_t response[len_r];
+
     for (uint32_t i = 0; i < len_r; i++)
         response[i] = 0;
+#endif
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
@@ -1223,23 +1097,16 @@ uint8_t mks_servo_uart_set_slave_respond(mks_conf_t mks_config, uint8_t address,
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
+#ifdef MKS_PC_RETURN
+    if (enable == 1)
     {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
+        mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
+        return response[3];
     }
+#endif
 
-    return response[3];
+    return 1;
 }
 
 
@@ -1254,14 +1121,17 @@ uint8_t mks_servo_uart_restore(mks_conf_t mks_config, uint8_t address)
 {
     uint8_t len_w = 5;
     uint8_t datagram[len_w];
-    uint8_t len_r = 5;
-    uint8_t response[len_r];
 
     for (uint32_t i = 0; i < len_w; i++)
         datagram[i] = 0;
 
+#ifdef MKS_PC_RETURN
+    uint8_t len_r = 5;
+    uint8_t response[len_r];
+
     for (uint32_t i = 0; i < len_r; i++)
         response[i] = 0;
+#endif
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
@@ -1271,23 +1141,13 @@ uint8_t mks_servo_uart_restore(mks_conf_t mks_config, uint8_t address)
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+#ifdef MKS_PC_RETURN
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
+#endif
+
+    return 1;
 }
 
 
@@ -1302,14 +1162,17 @@ uint8_t mks_servo_uart_cr_query(mks_conf_t mks_config, uint8_t address)
 {
     uint8_t len_w = 4;
     uint8_t datagram[len_w];
-    uint8_t len_r = 5;
-    uint8_t response[len_r];
 
     for (uint32_t i = 0; i < len_w; i++)
         datagram[i] = 0;
 
+#ifdef MKS_PC_RETURN
+    uint8_t len_r = 5;
+    uint8_t response[len_r];
+
     for (uint32_t i = 0; i < len_r; i++)
         response[i] = 0;
+#endif
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
@@ -1318,23 +1181,13 @@ uint8_t mks_servo_uart_cr_query(mks_conf_t mks_config, uint8_t address)
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+#ifdef MKS_PC_RETURN
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
+#endif
+
+    return 1;
 }
 
 
@@ -1350,14 +1203,17 @@ uint8_t mks_servo_uart_cr_enable(mks_conf_t mks_config, uint8_t address, uint8_t
 {
     uint8_t len_w = 5;
     uint8_t datagram[len_w];
-    uint8_t len_r = 5;
-    uint8_t response[len_r];
 
     for (uint32_t i = 0; i < len_w; i++)
         datagram[i] = 0;
 
+#ifdef MKS_PC_RETURN
+    uint8_t len_r = 5;
+    uint8_t response[len_r];
+
     for (uint32_t i = 0; i < len_r; i++)
         response[i] = 0;
+#endif
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
@@ -1367,23 +1223,13 @@ uint8_t mks_servo_uart_cr_enable(mks_conf_t mks_config, uint8_t address, uint8_t
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+#ifdef MKS_PC_RETURN
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
+#endif
+
+    return 1;
 }
 
 
@@ -1423,14 +1269,17 @@ uint8_t mks_servo_uart_cr_run_w_speed(mks_conf_t mks_config, uint8_t address, in
 
     uint8_t len_w = 7;
     uint8_t datagram[len_w];
-    uint8_t len_r = 5;
-    uint8_t response[len_r];
 
     for (uint32_t i = 0; i < len_w; i++)
         datagram[i] = 0;
 
+#ifdef MKS_PC_RETURN
+    uint8_t len_r = 5;
+    uint8_t response[len_r];
+
     for (uint32_t i = 0; i < len_r; i++)
         response[i] = 0;
+#endif
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
@@ -1442,26 +1291,16 @@ uint8_t mks_servo_uart_cr_run_w_speed(mks_conf_t mks_config, uint8_t address, in
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
     if (speed == 0)
-        return 2;
+        return 1;
 
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+#ifdef MKS_PC_RETURN
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
+#endif
+
+    return 1;
 }
 
 
@@ -1476,14 +1315,17 @@ uint8_t mks_servo_uart_cr_save_params(mks_conf_t mks_config, uint8_t address)
 {
     uint8_t len_w = 5;
     uint8_t datagram[len_w];
-    uint8_t len_r = 5;
-    uint8_t response[len_r];
 
     for (uint32_t i = 0; i < len_w; i++)
         datagram[i] = 0;
 
+#ifdef MKS_PC_RETURN
+    uint8_t len_r = 5;
+    uint8_t response[len_r];
+
     for (uint32_t i = 0; i < len_r; i++)
         response[i] = 0;
+#endif
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
@@ -1493,23 +1335,13 @@ uint8_t mks_servo_uart_cr_save_params(mks_conf_t mks_config, uint8_t address)
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+#ifdef MKS_PC_RETURN
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
+#endif
+
+    return 1;
 }
 
 
@@ -1524,14 +1356,17 @@ uint8_t mks_servo_uart_cr_clear_params(mks_conf_t mks_config, uint8_t address)
 {
     uint8_t len_w = 5;
     uint8_t datagram[len_w];
-    uint8_t len_r = 5;
-    uint8_t response[len_r];
 
     for (uint32_t i = 0; i < len_w; i++)
         datagram[i] = 0;
 
+#ifdef MKS_PC_RETURN
+    uint8_t len_r = 5;
+    uint8_t response[len_r];
+
     for (uint32_t i = 0; i < len_r; i++)
         response[i] = 0;
+#endif
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
@@ -1541,23 +1376,13 @@ uint8_t mks_servo_uart_cr_clear_params(mks_conf_t mks_config, uint8_t address)
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
-    uint32_t cnt = 0;
-
-    do
-    {
-        mks_servo_uart_recv(mks_config, response, len_r);
-        cnt++;
-    } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address) && (cnt < MKS_UART_MAX_REPEAT));
-
-    if (cnt >= MKS_UART_MAX_REPEAT)
-    {
-        ESP_LOGE(TAG, "UART read timeout");
-
-        if (abort_on == true)
-            abort();
-    }
+#ifdef MKS_PC_RETURN
+    mks_servo_uart_recv_check(mks_config, address, response, len_r);
 
     return response[3];
+#endif
+
+    return 1;
 }
 
 
@@ -1598,14 +1423,17 @@ uint8_t mks_servo_uart_cr_set_pos(mks_conf_t mks_config, uint8_t address, int16_
 
     uint8_t len_w = 11;
     uint8_t datagram[len_w];
-    uint8_t len_r = 5;
-    uint8_t response[len_r];
 
     for (uint32_t i = 0; i < len_w; i++)
         datagram[i] = 0;
 
+#ifdef MKS_PC_RETURN
+    uint8_t len_r = 5;
+    uint8_t response[len_r];
+
     for (uint32_t i = 0; i < len_r; i++)
         response[i] = 0;
+#endif
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
@@ -1621,6 +1449,7 @@ uint8_t mks_servo_uart_cr_set_pos(mks_conf_t mks_config, uint8_t address, int16_
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
+#ifdef MKS_PC_RETURN
     // wait until motor stops
     uint32_t buf = 0;
 
@@ -1646,4 +1475,7 @@ uint8_t mks_servo_uart_cr_set_pos(mks_conf_t mks_config, uint8_t address, int16_
     }
 
     return 0;
+#endif
+
+    return 1;
 }
