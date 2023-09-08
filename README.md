@@ -5,8 +5,6 @@
 
 ## To do list:
 * debug and test
-* speed mode not working
-* encoder read not working correctly
 
 ## Sources
 https://github.com/makerbase-mks/MKS-SERVO57C
