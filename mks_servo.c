@@ -1119,7 +1119,7 @@ uint8_t mks_servo_uart_set_slave_respond(mks_conf_t mks_config, uint8_t address,
  */
 uint8_t mks_servo_uart_restore(mks_conf_t mks_config, uint8_t address)
 {
-    uint8_t len_w = 5;
+    uint8_t len_w = 4;
     uint8_t datagram[len_w];
 
     for (uint32_t i = 0; i < len_w; i++)
@@ -1136,8 +1136,7 @@ uint8_t mks_servo_uart_restore(mks_conf_t mks_config, uint8_t address)
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
     datagram[2] = MKS_RESTORE_FUNC;
-    datagram[3] = (uint8_t)NULL;
-    datagram[4] = mks_servo_uart_calc_CRC(datagram, len_w);
+    datagram[3] = mks_servo_uart_calc_CRC(datagram, len_w);
 
     mks_servo_uart_send(mks_config, datagram, len_w);
 
