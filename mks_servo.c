@@ -421,7 +421,7 @@ float mks_servo_uart_read_encoder(mks_conf_t mks_config, uint8_t address)
     int32_t carry = response[3] << 24 | response[4] << 16 | response[5] << 8 | response[6];
     uint16_t value = response[7] << 8 | response[8];
 
-    float encoder_value = (float)carry * (float)0x3FFF + (float)value;
+    float encoder_value = (float)carry * 360.0f + (float)value * 360.0f / (float)0x3FFF;
 
     return encoder_value;
 }
@@ -1243,15 +1243,15 @@ uint8_t mks_servo_uart_cr_enable(mks_conf_t mks_config, uint8_t address, uint8_t
  */
 uint8_t mks_servo_uart_cr_run_w_speed(mks_conf_t mks_config, uint8_t address, int16_t speed, uint8_t accel)
 {
-    if (speed > 1600)
+    if (speed > MKS_MAX_SPEED)
     {
-        ESP_LOGW(TAG, "speed is too high, set to 1600");
-        speed = 1600;
+        ESP_LOGW(TAG, "speed is too high, set to %d", MKS_MAX_SPEED);
+        speed = MKS_MAX_SPEED;
     }
-    else if (speed < -1600)
+    else if (speed < -MKS_MAX_SPEED)
     {
-        ESP_LOGW(TAG, "speed is too high, set to -1600");
-        speed = -1600;
+        ESP_LOGW(TAG, "speed is too high, set to %d", -MKS_MAX_SPEED);
+        speed = -MKS_MAX_SPEED;
     }
 
     if (speed < 0)
@@ -1397,15 +1397,15 @@ uint8_t mks_servo_uart_cr_clear_params(mks_conf_t mks_config, uint8_t address)
  */
 uint8_t mks_servo_uart_cr_set_pos(mks_conf_t mks_config, uint8_t address, int16_t speed, uint8_t accel, uint32_t pulses)
 {
-    if (speed > 1600)
+    if (speed > MKS_MAX_SPEED)
     {
-        ESP_LOGW(TAG, "speed is too high, set to 1600");
-        speed = 1600;
+        ESP_LOGW(TAG, "speed is too high, set to %d", MKS_MAX_SPEED);
+        speed = MKS_MAX_SPEED;
     }
-    else if (speed < -1600)
+    else if (speed < -MKS_MAX_SPEED)
     {
-        ESP_LOGW(TAG, "speed is too high, set to -1600");
-        speed = -1600;
+        ESP_LOGW(TAG, "speed is too high, set to %d", -MKS_MAX_SPEED);
+        speed = -MKS_MAX_SPEED;
     }
 
     if (speed < 0)
