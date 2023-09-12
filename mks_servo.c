@@ -1282,7 +1282,7 @@ uint8_t mks_servo_uart_cr_run_w_speed(mks_conf_t mks_config, uint8_t address, in
 
     datagram[0] = MKS_UPLINK_HEAD;
     datagram[1] = address;
-    datagram[2] = MKS_CR_UART_MOTOR_RUN;
+    datagram[2] = MKS_CR_UART_MOTOR_TURN;
     datagram[3] = speed >> 8;
     datagram[4] = speed;
     datagram[5] = accel;

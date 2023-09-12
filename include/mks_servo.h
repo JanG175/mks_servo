@@ -46,6 +46,7 @@
 // MKS serial control commands
 #define MKS_CR_UART_QUERY           0xF1
 #define MKS_CR_UART_ENABLE          0xF3
+#define MKS_CR_UART_MOTOR_TURN      0xF6
 #define MKS_CR_UART_MOTOR_RUN       0xFD
 #define MKS_CR_UART_SAVE_CLEAR      0xFF
 
@@ -72,7 +73,7 @@
 #define MKS_CW_DIR                  0
 #define MKS_CCW_DIR                 1
 #define MKS_FULL_ROT                200
-#define MKS_MAX_SPEED               1279
+#define MKS_MAX_SPEED               1600 //1279
 
 typedef struct mks_conf_t
 {
