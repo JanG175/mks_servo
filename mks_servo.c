@@ -91,6 +91,12 @@ static void mks_servo_uart_recv(mks_conf_t mks_config, uint8_t* datagram, uint8_
     buf = uart_read_bytes(mks_config.uart, data, len, MKS_UART_TIMEOUT_MS);
     uart_flush(mks_config.uart);
 
+    // // for debug
+    // printf("mks:\t");
+    // for (uint32_t i = 0; i < buf; i++)
+    //     printf("%2X ", data[i]);
+    // printf("\n");
+
     if (buf == len)
     {
         for (int i = 0; i < buf; i++)
@@ -111,15 +117,18 @@ static void mks_servo_uart_recv(mks_conf_t mks_config, uint8_t* datagram, uint8_
  * 
  * @param mks_config struct with MKS connection parameters
  * @param address MKS slave address
+ * @param datagram pointer to send datagram
+ * @param len_w length of send datagram
  * @param response pointer to response datagram
  * @param len_r length of response datagram
  */
-static void mks_servo_uart_recv_check(mks_conf_t mks_config, uint8_t address, uint8_t* response, uint8_t len_r)
+static void mks_servo_uart_send_w_recv_check(mks_conf_t mks_config, uint8_t address, uint8_t* datagram, uint8_t len_w, uint8_t* response, uint8_t len_r)
 {
     uint32_t cnt = 0;
 
     do
     {
+        mks_servo_uart_send(mks_config, datagram, len_w);
         mks_servo_uart_recv(mks_config, response, len_r);
         cnt++;
     } while ((response[0] != MKS_DOWNLINK_HEAD || response[1] != address || mks_servo_uart_check_CRC(response, len_r) == false) && (cnt < MKS_UART_MAX_REPEAT));
@@ -414,9 +423,7 @@ float mks_servo_uart_read_encoder(mks_conf_t mks_config, uint8_t address)
     datagram[2] = MKS_ENCODER_READ;
     datagram[3] = mks_servo_uart_calc_CRC(datagram, len_w);
 
-    mks_servo_uart_send(mks_config, datagram, len_w);
-
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     int32_t carry = response[3] << 24 | response[4] << 16 | response[5] << 8 | response[6];
     uint16_t value = response[7] << 8 | response[8];
@@ -452,9 +459,7 @@ int32_t mks_servo_uart_read_pulses(mks_conf_t mks_config, uint8_t address)
     datagram[2] = MKS_PULSE_READ;
     datagram[3] = mks_servo_uart_calc_CRC(datagram, len_w);
 
-    mks_servo_uart_send(mks_config, datagram, len_w);
-
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     int32_t pulses = response[3] << 24 | response[4] << 16 | response[5] << 8 | response[6];
 
@@ -488,9 +493,7 @@ int16_t mks_servo_uart_read_motor_shaft_error(mks_conf_t mks_config, uint8_t add
     datagram[2] = MKS_SHAFT_ERROR_READ;
     datagram[3] = mks_servo_uart_calc_CRC(datagram, len_w);
 
-    mks_servo_uart_send(mks_config, datagram, len_w);
-
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     int16_t shaft_error = response[3] << 8 | response[4];
 
@@ -523,9 +526,7 @@ uint8_t mks_servo_uart_read_enable(mks_conf_t mks_config, uint8_t address)
     datagram[2] = MKS_ENABLE_READ;
     datagram[3] = mks_servo_uart_calc_CRC(datagram, len_w);
 
-    mks_servo_uart_send(mks_config, datagram, len_w);
-
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     return response[3];
 }
@@ -556,9 +557,7 @@ uint8_t mks_servo_uart_read_go_to_zero_status(mks_conf_t mks_config, uint8_t add
     datagram[2] = MKS_GO_TO_ZERO_READ;
     datagram[3] = mks_servo_uart_calc_CRC(datagram, len_w);
 
-    mks_servo_uart_send(mks_config, datagram, len_w);
-
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     return response[3];
 }
@@ -592,10 +591,12 @@ uint8_t mks_servo_uart_release_protection_state(mks_conf_t mks_config, uint8_t a
     datagram[2] = MKS_RELEASE_SHAFT;
     datagram[3] = mks_servo_uart_calc_CRC(datagram, len_w);
 
+#ifndef MKS_PC_RETURN
     mks_servo_uart_send(mks_config, datagram, len_w);
+#endif
 
 #ifdef MKS_PC_RETURN
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     return response[3];
 #endif
@@ -629,9 +630,7 @@ uint8_t mks_servo_uart_read_protection_state(mks_conf_t mks_config, uint8_t addr
     datagram[2] = MKS_SHAFT_READ;
     datagram[3] = mks_servo_uart_calc_CRC(datagram, len_w);
 
-    mks_servo_uart_send(mks_config, datagram, len_w);
-
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     return response[3];
 }
@@ -666,14 +665,15 @@ uint8_t mks_servo_uart_calibrate_encoder(mks_conf_t mks_config, uint8_t address)
     datagram[3] = 0x00;
     datagram[4] = mks_servo_uart_calc_CRC(datagram, len_w);
 
+#ifndef MKS_PC_RETURN
     mks_servo_uart_send(mks_config, datagram, len_w);
+#endif
 
     // wait for 30 sec for encoder to calibrate
     vTaskDelay(30000 / portTICK_PERIOD_MS);
 
 #ifdef MKS_PC_RETURN
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
-
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
     return response[3];
 #endif
 
@@ -714,7 +714,7 @@ uint8_t mks_servo_uart_set_work_mode(mks_conf_t mks_config, uint8_t address, uin
     mks_servo_uart_send(mks_config, datagram, len_w);
 
 #ifdef MKS_PC_RETURN
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     return response[3];
 #endif
@@ -762,7 +762,7 @@ uint8_t mks_servo_uart_set_current(mks_conf_t mks_config, uint8_t address, uint8
     mks_servo_uart_send(mks_config, datagram, len_w);
 
 #ifdef MKS_PC_RETURN
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     return response[3];
 #endif
@@ -804,7 +804,7 @@ uint8_t mks_servo_uart_set_mstep(mks_conf_t mks_config, uint8_t address, uint8_t
     mks_servo_uart_send(mks_config, datagram, len_w);
 
 #ifdef MKS_PC_RETURN
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     return response[3];
 #endif
@@ -846,7 +846,7 @@ uint8_t mks_servo_uart_set_enable(mks_conf_t mks_config, uint8_t address, uint8_
     mks_servo_uart_send(mks_config, datagram, len_w);
 
 #ifdef MKS_PC_RETURN
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     return response[3];
 #endif
@@ -888,7 +888,7 @@ uint8_t mks_servo_uart_set_dir(mks_conf_t mks_config, uint8_t address, uint8_t d
     mks_servo_uart_send(mks_config, datagram, len_w);
 
 #ifdef MKS_PC_RETURN
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     return response[3];
 #endif
@@ -930,7 +930,7 @@ uint8_t mks_servo_uart_set_shaft_protection(mks_conf_t mks_config, uint8_t addre
     mks_servo_uart_send(mks_config, datagram, len_w);
 
 #ifdef MKS_PC_RETURN
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     return response[3];
 #endif
@@ -972,7 +972,7 @@ uint8_t mks_servo_uart_set_mplyer(mks_conf_t mks_config, uint8_t address, uint8_
     mks_servo_uart_send(mks_config, datagram, len_w);
 
 #ifdef MKS_PC_RETURN
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     return response[3];
 #endif
@@ -1014,7 +1014,7 @@ uint8_t mks_servo_uart_set_baud_rate(mks_conf_t mks_config, uint8_t address, uin
     mks_servo_uart_send(mks_config, datagram, len_w);
 
 #ifdef MKS_PC_RETURN
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     return response[3];
 #endif
@@ -1056,7 +1056,7 @@ uint8_t mks_servo_uart_set_slave_address(mks_conf_t mks_config, uint8_t address,
     mks_servo_uart_send(mks_config, datagram, len_w);
 
 #ifdef MKS_PC_RETURN
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     return response[3];
 #endif
@@ -1100,8 +1100,7 @@ uint8_t mks_servo_uart_set_slave_respond(mks_conf_t mks_config, uint8_t address,
 #ifdef MKS_PC_RETURN
     if (enable == 1)
     {
-        mks_servo_uart_recv_check(mks_config, address, response, len_r);
-
+        mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
         return response[3];
     }
 #endif
@@ -1138,10 +1137,12 @@ uint8_t mks_servo_uart_restore(mks_conf_t mks_config, uint8_t address)
     datagram[2] = MKS_RESTORE_FUNC;
     datagram[3] = mks_servo_uart_calc_CRC(datagram, len_w);
 
+#ifndef MKS_PC_RETURN
     mks_servo_uart_send(mks_config, datagram, len_w);
+#endif
 
 #ifdef MKS_PC_RETURN
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     return response[3];
 #endif
@@ -1178,10 +1179,12 @@ uint8_t mks_servo_uart_cr_query(mks_conf_t mks_config, uint8_t address)
     datagram[2] = MKS_CR_UART_QUERY;
     datagram[3] = mks_servo_uart_calc_CRC(datagram, len_w);
 
+#ifndef MKS_PC_RETURN
     mks_servo_uart_send(mks_config, datagram, len_w);
+#endif
 
 #ifdef MKS_PC_RETURN
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     return response[3];
 #endif
@@ -1220,10 +1223,12 @@ uint8_t mks_servo_uart_cr_enable(mks_conf_t mks_config, uint8_t address, uint8_t
     datagram[3] = enable;
     datagram[4] = mks_servo_uart_calc_CRC(datagram, len_w);
 
+#ifndef MKS_PC_RETURN
     mks_servo_uart_send(mks_config, datagram, len_w);
+#endif
 
 #ifdef MKS_PC_RETURN
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     return response[3];
 #endif
@@ -1237,7 +1242,7 @@ uint8_t mks_servo_uart_cr_enable(mks_conf_t mks_config, uint8_t address, uint8_t
  * 
  * @param mks_config struct with MKS configs
  * @param address MKS slave address
- * @param speed speed value with direction sign (-1600 - 1600)
+ * @param speed speed value with direction sign (-1279 - 1279)
  * @param accel acceleration value (0 - 32)
  * @return 0 - set fail, 1 - set success
  */
@@ -1288,14 +1293,15 @@ uint8_t mks_servo_uart_cr_run_w_speed(mks_conf_t mks_config, uint8_t address, in
     datagram[5] = accel;
     datagram[6] = mks_servo_uart_calc_CRC(datagram, len_w);
 
-    mks_servo_uart_send(mks_config, datagram, len_w);
-
     if (speed == 0)
         return 1;
 
-#ifdef MKS_PC_RETURN
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+#ifndef MKS_PC_RETURN
+    mks_servo_uart_send(mks_config, datagram, len_w);
+#endif
 
+#ifdef MKS_PC_RETURN
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
     return response[3];
 #endif
 
@@ -1332,10 +1338,12 @@ uint8_t mks_servo_uart_cr_save_params(mks_conf_t mks_config, uint8_t address)
     datagram[3] = MKS_CR_UART_STATUS_SAVE;
     datagram[4] = mks_servo_uart_calc_CRC(datagram, len_w);
 
+#ifndef MKS_PC_RETURN
     mks_servo_uart_send(mks_config, datagram, len_w);
+#endif
 
 #ifdef MKS_PC_RETURN
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     return response[3];
 #endif
@@ -1373,10 +1381,12 @@ uint8_t mks_servo_uart_cr_clear_params(mks_conf_t mks_config, uint8_t address)
     datagram[3] = MKS_CR_UART_STATUS_CLEAR;
     datagram[4] = mks_servo_uart_calc_CRC(datagram, len_w);
 
+#ifndef MKS_PC_RETURN
     mks_servo_uart_send(mks_config, datagram, len_w);
+#endif
 
 #ifdef MKS_PC_RETURN
-    mks_servo_uart_recv_check(mks_config, address, response, len_r);
+    mks_servo_uart_send_w_recv_check(mks_config, address, datagram, len_w, response, len_r);
 
     return response[3];
 #endif
@@ -1390,7 +1400,7 @@ uint8_t mks_servo_uart_cr_clear_params(mks_conf_t mks_config, uint8_t address)
  * 
  * @param mks_config struct with MKS configs
  * @param address MKS slave address
- * @param speed speed value with direction sign (-1600 - 1600)
+ * @param speed speed value with direction sign (-1279 - 1279)
  * @param accel acceleration value (0 - 32)
  * @param pulses number of pulses
  * @return 0 - set fail, 1 - set success
@@ -1446,7 +1456,9 @@ uint8_t mks_servo_uart_cr_set_pos(mks_conf_t mks_config, uint8_t address, int16_
     datagram[9] = pulses & 0xFF;
     datagram[10] = mks_servo_uart_calc_CRC(datagram, len_w);
 
+#ifndef MKS_PC_RETURN
     mks_servo_uart_send(mks_config, datagram, len_w);
+#endif
 
 #ifdef MKS_PC_RETURN
     // wait until motor stops
