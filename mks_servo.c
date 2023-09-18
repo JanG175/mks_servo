@@ -9,17 +9,17 @@
 #include <stdio.h>
 #include "mks_servo.h"
 
-#define MKS_SERVO_N 1 // declare how many motors do you want to use
-
-// #define MKS_PC_RETURN 1 // define if you want to return message to PC
-
 static bool abort_on = true; // if true - abort on UART read timeout
+
+#ifdef MKS_STEP_MODE_ENABLE
 
 static portMUX_TYPE spinlock = portMUX_INITIALIZER_UNLOCKED;
 
 static gptimer_handle_t gptimer[MKS_SERVO_N];
 static int64_t steps_left[MKS_SERVO_N];
 static const uint32_t timer_N = MKS_SERVO_N; // number of timers
+
+#endif // MKS_STEP_MODE_ENABLE
 
 static const char* TAG = "mks_servo";
 
@@ -143,6 +143,8 @@ static void mks_servo_uart_send_w_recv_check(mks_conf_t mks_config, uint8_t addr
 }
 
 
+#ifdef MKS_STEP_MODE_ENABLE
+
 /**
  * @brief callback function for timers
  * 
@@ -176,6 +178,8 @@ static bool mks_servo_clk_timer_callback(gptimer_handle_t timer, const gptimer_a
     return (high_task_awoken == pdTRUE);
 }
 
+#endif // MKS_STEP_MODE_ENABLE
+
 
 /**
  * @brief initialize MKS UART and timers
@@ -201,6 +205,8 @@ void mks_servo_init(mks_conf_t mks_config)
     ESP_ERROR_CHECK(uart_driver_install(mks_config.uart, 2048, 2048, 0, NULL, 0));
     ESP_ERROR_CHECK(uart_param_config(mks_config.uart, &uart_config));
     ESP_ERROR_CHECK(uart_set_pin(mks_config.uart, mks_config.tx_pin, mks_config.rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+
+#ifdef MKS_STEP_MODE_ENABLE
 
     mks_cb_arg_t* cb_arg = malloc(sizeof(mks_cb_arg_t) * timer_N); // allocate memory for callback arguments
 
@@ -250,21 +256,29 @@ void mks_servo_init(mks_conf_t mks_config)
 
         mks_servo_enable(mks_config, i, 1); // enable motor
     }
+
+#endif // MKS_STEP_MODE_ENABLE
 }
 
 
 // deinit MKS UART and timers
 void mks_servo_deinit(mks_conf_t mks_config)
 {
+#ifdef MKS_STEP_MODE_ENABLE
+
     for (uint32_t i = 0; i < timer_N; i++)
     {
         ESP_ERROR_CHECK(gptimer_disable(gptimer[i]));
         ESP_ERROR_CHECK(gptimer_del_timer(gptimer[i]));
     }
 
+#endif // MKS_STEP_MODE_ENABLE
+
     ESP_ERROR_CHECK(uart_driver_delete(mks_config.uart));
 }
 
+
+#ifdef MKS_STEP_MODE_ENABLE
 
 /**
  * @brief set enable pin
@@ -396,6 +410,7 @@ void mks_servo_step_move(mks_conf_t mks_config, int64_t* steps, uint32_t* period
     //     ESP_LOGI(TAG, "%lu: %lld", motor_num, steps_left[motor_num] / 2);
 }
 
+#endif // MKS_STEP_MODE_ENABLE
 
 /**
  * @brief read encoder value

@@ -14,6 +14,14 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 
+// MKS config
+// #define MKS_STEP_MODE_ENABLE 1 // uncomment to enable step mode
+// #define MKS_PC_RETURN 1 // uncommnent if you want to return message to PC
+
+#ifdef MKS_STEP_MODE_ENABLE
+#define MKS_SERVO_N 1 // declare how many motors do you want to use
+#endif // MKS_STEP_MODE_ENABLE
+
 // MKS HEAD
 #define MKS_UPLINK_HEAD             0xFA
 #define MKS_DOWNLINK_HEAD           0xFB
@@ -63,7 +71,7 @@
 #define MKS_BAUDRATE_115200         0x06
 #define MKS_BAUDRATE_256000         0x07
 
-// MKS configs
+// MKS constants
 #define MKS_TIMER_GROUP             TIMER_GROUP_0
 #define MKS_TIMER_ID                TIMER_0
 
@@ -81,9 +89,11 @@ typedef struct mks_conf_t
     uint32_t baudrate;
     gpio_num_t tx_pin;
     gpio_num_t rx_pin;
+#ifdef MKS_STEP_MODE_ENABLE
     gpio_num_t* step_pin;
     gpio_num_t* dir_pin;
     gpio_num_t* en_pin;
+#endif // MKS_STEP_MODE_ENABLE
 } mks_conf_t;
 
 typedef struct mks_cb_arg_t
@@ -97,6 +107,8 @@ void mks_servo_init(mks_conf_t mks_conf);
 
 void mks_servo_deinit(mks_conf_t mks_conf);
 
+#ifdef MKS_STEP_MODE_ENABLE
+
 void mks_servo_enable(mks_conf_t mks_conf, uint32_t motor_num, uint32_t enable);
 
 void mks_servo_set_dir(mks_conf_t mks_conf, uint32_t motor_num, uint32_t cw);
@@ -106,6 +118,8 @@ void mks_servo_set_period(uint32_t motor_num, uint32_t period_us);
 void mks_servo_start(mks_conf_t mks_conf, uint32_t motor_num, uint32_t start);
 
 void mks_servo_step_move(mks_conf_t mks_conf, int64_t* steps, uint32_t* period_us);
+
+#endif // MKS_STEP_MODE_ENABLE
 
 float mks_servo_uart_read_encoder(mks_conf_t mks_conf, uint8_t address);
 
