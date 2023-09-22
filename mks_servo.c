@@ -274,7 +274,8 @@ void mks_servo_deinit(mks_conf_t mks_config)
 
 #endif // MKS_STEP_MODE_ENABLE
 
-    ESP_ERROR_CHECK(uart_driver_delete(mks_config.uart));
+    if (uart_is_driver_installed(mks_config.uart) == true)
+        ESP_ERROR_CHECK(uart_driver_delete(mks_config.uart));
 }
 
 
