@@ -135,7 +135,7 @@ static void mks_servo_uart_send_w_recv_check(mks_conf_t mks_config, uint8_t addr
 
     if (cnt >= MKS_UART_MAX_REPEAT)
     {
-        ESP_LOGE(TAG, "UART read timeout");
+        ESP_LOGE(TAG, "%u: UART read timeout", address);
 
         if (abort_on == true)
             abort();
