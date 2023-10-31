@@ -1309,9 +1309,6 @@ uint8_t mks_servo_uart_cr_run_w_speed(mks_conf_t mks_config, uint8_t address, in
     datagram[5] = accel;
     datagram[6] = mks_servo_uart_calc_CRC(datagram, len_w);
 
-    if (speed == 0)
-        return 1;
-
 #ifndef MKS_PC_RETURN
     mks_servo_uart_send(mks_config, datagram, len_w);
 #endif
