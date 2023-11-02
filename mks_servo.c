@@ -12,13 +12,10 @@
 static bool abort_on = true; // if true - abort on UART read timeout
 
 #ifdef MKS_STEP_MODE_ENABLE
-
 static portMUX_TYPE spinlock = portMUX_INITIALIZER_UNLOCKED;
 
-static gptimer_handle_t gptimer[MKS_SERVO_N];
-static int64_t steps_left[MKS_SERVO_N];
-static const uint32_t timer_N = MKS_SERVO_N; // number of timers
-
+static gptimer_handle_t* gptimer;
+static uint64_t* steps_left;
 #endif // MKS_STEP_MODE_ENABLE
 
 static const char* TAG = "mks_servo";
@@ -144,7 +141,6 @@ static void mks_servo_uart_send_w_recv_check(mks_conf_t mks_config, uint8_t addr
 
 
 #ifdef MKS_STEP_MODE_ENABLE
-
 /**
  * @brief callback function for timers
  * 
@@ -159,25 +155,28 @@ static bool mks_servo_clk_timer_callback(gptimer_handle_t timer, const gptimer_a
 
     mks_cb_arg_t cb_arg = *(mks_cb_arg_t*)user_ctx;
     gpio_num_t step_pin = cb_arg.step_pin;
-    uint32_t motor_num = cb_arg.motor_num;
+    uint8_t motor_num = cb_arg.motor_num;
 
-    if (steps_left[motor_num] > 0)
+    portENTER_CRITICAL_ISR(&spinlock);
+    uint64_t steps = steps_left[motor_num];
+    portEXIT_CRITICAL_ISR(&spinlock);
+
+    if (steps > 0)
     {
         if (gpio_get_level(step_pin) == 0)
             gpio_set_level(step_pin, 1);
         else
             gpio_set_level(step_pin, 0);
 
-        portENTER_CRITICAL(&spinlock);
+        portENTER_CRITICAL_ISR(&spinlock);
         steps_left[motor_num]--;
-        portEXIT_CRITICAL(&spinlock);
+        portEXIT_CRITICAL_ISR(&spinlock);
     }
     else
         ESP_ERROR_CHECK(gptimer_stop(timer));
 
     return (high_task_awoken == pdTRUE);
 }
-
 #endif // MKS_STEP_MODE_ENABLE
 
 
@@ -207,6 +206,12 @@ void mks_servo_init(mks_conf_t mks_config)
     ESP_ERROR_CHECK(uart_set_pin(mks_config.uart, mks_config.tx_pin, mks_config.rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
 #ifdef MKS_STEP_MODE_ENABLE
+    uint8_t timer_N = mks_config.motor_num;
+
+    portENTER_CRITICAL(&spinlock);
+    gptimer = malloc(sizeof(gptimer_handle_t) * timer_N);
+    steps_left = malloc(sizeof(uint64_t) * timer_N);
+    portEXIT_CRITICAL(&spinlock);
 
     mks_cb_arg_t* cb_arg = malloc(sizeof(mks_cb_arg_t) * timer_N); // allocate memory for callback arguments
 
@@ -222,7 +227,7 @@ void mks_servo_init(mks_conf_t mks_config)
         io_conf.pull_up_en = 0;
         gpio_config(&io_conf);
 
-        mks_servo_enable(mks_config, i, 0);
+        mks_servo_enable(mks_config, i, false);
         mks_servo_set_dir(mks_config, i, MKS_CW_DIR);
 
         // configure timers
@@ -254,7 +259,7 @@ void mks_servo_init(mks_conf_t mks_config)
 
         ESP_ERROR_CHECK(gptimer_enable(gptimer[i]));
 
-        mks_servo_enable(mks_config, i, 1); // enable motor
+        mks_servo_enable(mks_config, i, true); // enable motor
     }
 
 #endif // MKS_STEP_MODE_ENABLE
@@ -265,18 +270,24 @@ void mks_servo_init(mks_conf_t mks_config)
 void mks_servo_deinit(mks_conf_t mks_config)
 {
 #ifdef MKS_STEP_MODE_ENABLE
-
-    for (uint32_t i = 0; i < timer_N; i++)
+    for (uint32_t i = 0; i < mks_config.motor_num; i++)
     {
         ESP_ERROR_CHECK(gptimer_disable(gptimer[i]));
         ESP_ERROR_CHECK(gptimer_del_timer(gptimer[i]));
     }
 
+    portENTER_CRITICAL(&spinlock);
+    free(gptimer);
+    free(steps_left);
+    portEXIT_CRITICAL(&spinlock);
 #endif // MKS_STEP_MODE_ENABLE
 
     if (uart_is_driver_installed(mks_config.uart) == true)
         ESP_ERROR_CHECK(uart_driver_delete(mks_config.uart));
 }
+
+
+// ============= STEP MODE FUNCTIONS =============
 
 
 #ifdef MKS_STEP_MODE_ENABLE
@@ -286,13 +297,13 @@ void mks_servo_deinit(mks_conf_t mks_config)
  * 
  * @param mks_config struct with MKS connection parameters
  * @param motor_num motor number
- * @param enable 0 - disable, 1 - enable
+ * @param enable false - disable (1), true - enable (0)
  */
-void mks_servo_enable(mks_conf_t mks_config, uint32_t motor_num, uint32_t enable)
+void mks_servo_enable(mks_conf_t mks_config, uint8_t motor_num, bool enable)
 {
-    if (enable == 0)
+    if (enable == false)
         gpio_set_level(mks_config.en_pin[motor_num], 0);
-    else if (enable == 1)
+    else if (enable == true)
         gpio_set_level(mks_config.en_pin[motor_num], 1);
 }
 
@@ -304,12 +315,9 @@ void mks_servo_enable(mks_conf_t mks_config, uint32_t motor_num, uint32_t enable
  * @param motor_num motor number
  * @param dir direction (CW_DIR or CCW_DIR)
  */
-void mks_servo_set_dir(mks_conf_t mks_config, uint32_t motor_num, uint32_t dir)
+void mks_servo_set_dir(mks_conf_t mks_config, uint8_t motor_num, uint8_t dir)
 {
-    if (dir == MKS_CW_DIR)
-        gpio_set_level(mks_config.dir_pin[motor_num], 0);
-    else if (dir == MKS_CCW_DIR)
-        gpio_set_level(mks_config.dir_pin[motor_num], 1);
+    gpio_set_level(mks_config.dir_pin[motor_num], dir);
 }
 
 
@@ -319,7 +327,7 @@ void mks_servo_set_dir(mks_conf_t mks_config, uint32_t motor_num, uint32_t dir)
  * @param motor_num motor number
  * @param period_us period in us
  */
-void mks_servo_set_period(uint32_t motor_num, uint32_t period_us)
+void mks_servo_set_period(uint8_t motor_num, uint64_t period_us)
 {
     if (period_us < 200)
         ESP_LOGW(TAG, "low period value - motor may not work properly");
@@ -341,16 +349,16 @@ void mks_servo_set_period(uint32_t motor_num, uint32_t period_us)
  * 
  * @param mks_config struct with MKS connection parameters
  * @param motor_num motor number
- * @param start 0 - stop, 1 - start
+ * @param start false - stop, true - start
  */
-void mks_servo_start(mks_conf_t mks_config, uint32_t motor_num, uint32_t start)
+void mks_servo_start(mks_conf_t mks_config, uint8_t motor_num, bool start)
 {
-    if (start == 0)
+    if (start == false)
     {
         ESP_ERROR_CHECK(gptimer_stop(gptimer[motor_num]));
         gpio_set_level(mks_config.step_pin[motor_num], 0);
     }
-    else if (start == 1)
+    else if (start == true)
     {
         ESP_ERROR_CHECK(gptimer_start(gptimer[motor_num]));
     }
@@ -358,60 +366,40 @@ void mks_servo_start(mks_conf_t mks_config, uint32_t motor_num, uint32_t start)
 
 
 /**
- * @brief move all motors by desired number of steps with desired period and direction (sign in steps variable)
+ * @brief move motor by desired number of steps with desired period and direction (sign in period_us variable)
  * 
  * @param mks_config struct with MKS connection parameters
- * @param steps array of steps for each motor
- * @param period_us array of periods for each motor
+ * @param steps steps to move
+ * @param period_us period in us
  */
-void mks_servo_step_move(mks_conf_t mks_config, int64_t* steps, uint32_t* period_us)
+void mks_servo_step_move(mks_conf_t mks_config, uint8_t motor_num, uint64_t steps, int64_t period_us)
 {
-    for (uint32_t motor_num = 0; motor_num < timer_N; motor_num++)
+    // set direction
+    if (period_us < 0)
     {
-        // set direction
-        if (steps[motor_num] < 0)
-        {
-            mks_servo_set_dir(mks_config, motor_num, 0);
-            steps[motor_num] = -steps[motor_num];
-        }
-        else
-            mks_servo_set_dir(mks_config, motor_num, 1);
-
-        // set period
-        mks_servo_set_period(motor_num, period_us[motor_num]);
-
-        // set number of steps
-        portENTER_CRITICAL(&spinlock);
-        steps_left[motor_num] = 2 * steps[motor_num];
-        portEXIT_CRITICAL(&spinlock);
+        mks_servo_set_dir(mks_config, motor_num, MKS_CW_DIR);
+        period_us = -period_us;
     }
+    else
+        mks_servo_set_dir(mks_config, motor_num, MKS_CCW_DIR);
 
-    // start all motors one by one
-    for (uint32_t motor_num = 0; motor_num < timer_N; motor_num++)
-        mks_servo_start(mks_config, motor_num, 1);
+    // set period
+    mks_servo_set_period(motor_num, period_us);
 
-    bool end_wait = false;
+    // set number of steps
+    portENTER_CRITICAL(&spinlock);
+    steps_left[motor_num] = 2 * steps; // 1 period = 2 gpio switches
+    portEXIT_CRITICAL(&spinlock);
 
-    // wait until all motors stop
-    while (end_wait == false)
-    {
-        int64_t steps_left_status = 0;
-
-        for (uint32_t motor_num = 0; motor_num < timer_N; motor_num++)
-            steps_left_status = steps_left_status + steps_left[motor_num];
-
-        if (steps_left_status <= 0)
-            end_wait = true;
-
-        vTaskDelay(1);
-    }
-
-    // // for debug
-    // for (uint32_t motor_num = 0; motor_num < timer_N; motor_num++)
-    //     ESP_LOGI(TAG, "%lu: %lld", motor_num, steps_left[motor_num] / 2);
+    // start timer and step signal
+    mks_servo_start(mks_config, motor_num, true);
 }
 
 #endif // MKS_STEP_MODE_ENABLE
+
+
+// ============= UART MODE FUNCTIONS =============
+
 
 /**
  * @brief read encoder value
