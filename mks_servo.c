@@ -302,9 +302,9 @@ void mks_servo_deinit(mks_conf_t mks_config)
 void mks_servo_enable(mks_conf_t mks_config, uint8_t motor_num, bool enable)
 {
     if (enable == false)
-        gpio_set_level(mks_config.en_pin[motor_num], 0);
-    else if (enable == true)
         gpio_set_level(mks_config.en_pin[motor_num], 1);
+    else if (enable == true)
+        gpio_set_level(mks_config.en_pin[motor_num], 0);
 }
 
 
@@ -1207,6 +1207,12 @@ uint8_t mks_servo_uart_cr_query(mks_conf_t mks_config, uint8_t address)
  */
 uint8_t mks_servo_uart_cr_enable(mks_conf_t mks_config, uint8_t address, uint8_t enable)
 {
+    if (enable != 1 && enable != 0)
+    {
+        enable = 0;
+        ESP_LOGW(TAG, "Invalid enable status. Set to 0.");
+    }
+
     uint8_t len_w = 5;
     uint8_t datagram[len_w];
 
