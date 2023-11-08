@@ -15,8 +15,10 @@
 #include "esp_log.h"
 
 // MKS config
-#define MKS_STEP_MODE_ENABLE 1 // uncomment to enable step mode
-// #define MKS_PC_RETURN 1 // uncommnent if you want to return message to PC
+#define MKS_STEP_MODE_ENABLE        1 // uncomment to enable step mode
+// #define MKS_PC_RETURN            1 // uncommnent if you want to return message to PC
+
+#define MKS_ACCEL_PER               0.1f // acceleration percentage
 
 // MKS HEAD
 #define MKS_UPLINK_HEAD             0xFA
@@ -94,6 +96,14 @@ typedef struct mks_cb_arg_t
 {
     gpio_num_t step_pin;
     uint8_t motor_num;
+
+    uint64_t steps_left;
+    uint64_t steps_total;
+    uint64_t period_goal;
+
+    double time_passed;
+    double dt;
+    double accel_s;
 } mks_cb_arg_t;
 
 

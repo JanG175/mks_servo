@@ -15,7 +15,8 @@ static bool abort_on = true; // if true - abort on UART read timeout
 static portMUX_TYPE spinlock = portMUX_INITIALIZER_UNLOCKED;
 
 static gptimer_handle_t* gptimer;
-static uint64_t* steps_left;
+
+static mks_cb_arg_t* cb_arg;
 #endif // MKS_STEP_MODE_ENABLE
 
 static const char* TAG = "mks_servo";
@@ -153,27 +154,52 @@ static bool mks_servo_clk_timer_callback(gptimer_handle_t timer, const gptimer_a
 {
     BaseType_t high_task_awoken = pdFALSE;
 
-    mks_cb_arg_t cb_arg = *(mks_cb_arg_t*)user_ctx;
-    gpio_num_t step_pin = cb_arg.step_pin;
-    uint8_t motor_num = cb_arg.motor_num;
-
     portENTER_CRITICAL_ISR(&spinlock);
-    uint64_t steps = steps_left[motor_num];
+    mks_cb_arg_t arg = *(mks_cb_arg_t*)user_ctx;
     portEXIT_CRITICAL_ISR(&spinlock);
 
-    if (steps > 0)
+    if (arg.steps_left > 0)
     {
-        if (gpio_get_level(step_pin) == 0)
-            gpio_set_level(step_pin, 1);
-        else
-            gpio_set_level(step_pin, 0);
+        if (gpio_get_level(arg.step_pin) == 0)
+        {
+            uint64_t period_cur = arg.period_goal;
 
-        portENTER_CRITICAL_ISR(&spinlock);
-        steps_left[motor_num]--;
-        portEXIT_CRITICAL_ISR(&spinlock);
+            if ((double)(arg.steps_total - arg.steps_left) < arg.accel_s) // acceleration
+            {
+                period_cur = (uint64_t)((arg.accel_s - (double)(arg.steps_total - arg.steps_left)) * arg.dt + 
+                                            (double)arg.period_goal * (1.0f - 1.0f / arg.accel_s));
+            }
+            else if ((double)arg.steps_left < arg.accel_s) // deceleartion
+            {
+                period_cur = (uint64_t)((arg.accel_s - (double)arg.steps_left) * arg.dt +
+                                            (double)arg.period_goal * (1.0f - 1.0f / arg.accel_s));
+            }
+
+            if (period_cur < arg.period_goal)
+                period_cur = arg.period_goal;
+
+            // change alert period
+            mks_servo_set_period(arg.motor_num, period_cur);
+
+            arg.time_passed += period_cur;
+            arg.steps_left--;
+            
+            portENTER_CRITICAL_ISR(&spinlock);
+            cb_arg[arg.motor_num].time_passed = arg.time_passed;
+            cb_arg[arg.motor_num].steps_left = arg.steps_left;
+            portEXIT_CRITICAL_ISR(&spinlock);
+
+            gpio_set_level(arg.step_pin, 1);
+        }
+        else
+            gpio_set_level(arg.step_pin, 0);
     }
     else
+    {
+        portENTER_CRITICAL(&spinlock);
         ESP_ERROR_CHECK(gptimer_stop(timer));
+        portEXIT_CRITICAL(&spinlock);
+    }
 
     return (high_task_awoken == pdTRUE);
 }
@@ -210,10 +236,8 @@ void mks_servo_init(mks_conf_t mks_config)
 
     portENTER_CRITICAL(&spinlock);
     gptimer = malloc(sizeof(gptimer_handle_t) * timer_N);
-    steps_left = malloc(sizeof(uint64_t) * timer_N);
+    cb_arg = malloc(sizeof(mks_cb_arg_t) * timer_N); // allocate memory for callback arguments
     portEXIT_CRITICAL(&spinlock);
-
-    mks_cb_arg_t* cb_arg = malloc(sizeof(mks_cb_arg_t) * timer_N); // allocate memory for callback arguments
 
     for (uint32_t i = 0; i < timer_N; i++)
     {
@@ -238,7 +262,9 @@ void mks_servo_init(mks_conf_t mks_config)
             .resolution_hz = 1000000 // 1 us
         };
 
+        portENTER_CRITICAL(&spinlock);
         ESP_ERROR_CHECK(gptimer_new_timer(&timer_config, &gptimer[i]));
+        portEXIT_CRITICAL(&spinlock);
 
         gptimer_alarm_config_t alarm_config = {
             .alarm_count = 1000000, // 1 s
@@ -246,20 +272,27 @@ void mks_servo_init(mks_conf_t mks_config)
             .flags.auto_reload_on_alarm = true
         };
 
+        portENTER_CRITICAL(&spinlock);
         ESP_ERROR_CHECK(gptimer_set_alarm_action(gptimer[i], &alarm_config));
+        portEXIT_CRITICAL(&spinlock);
 
         gptimer_event_callbacks_t timer_cbs = {
             .on_alarm = mks_servo_clk_timer_callback
         };
 
+        portENTER_CRITICAL(&spinlock);
         cb_arg[i].step_pin = mks_config.step_pin[i];
         cb_arg[i].motor_num = i;
+        portEXIT_CRITICAL(&spinlock);
 
+        portENTER_CRITICAL(&spinlock);
         ESP_ERROR_CHECK(gptimer_register_event_callbacks(gptimer[i], &timer_cbs, (void*)&cb_arg[i]));
-
         ESP_ERROR_CHECK(gptimer_enable(gptimer[i]));
+        portEXIT_CRITICAL(&spinlock);
 
         mks_servo_enable(mks_config, i, true); // enable motor
+
+        vTaskDelay(100 / portTICK_PERIOD_MS);
     }
 
 #endif // MKS_STEP_MODE_ENABLE
@@ -272,13 +305,15 @@ void mks_servo_deinit(mks_conf_t mks_config)
 #ifdef MKS_STEP_MODE_ENABLE
     for (uint32_t i = 0; i < mks_config.motor_num; i++)
     {
+        portENTER_CRITICAL(&spinlock);
         ESP_ERROR_CHECK(gptimer_disable(gptimer[i]));
         ESP_ERROR_CHECK(gptimer_del_timer(gptimer[i]));
+        portEXIT_CRITICAL(&spinlock);
     }
 
     portENTER_CRITICAL(&spinlock);
     free(gptimer);
-    free(steps_left);
+    free(cb_arg);
     portEXIT_CRITICAL(&spinlock);
 #endif // MKS_STEP_MODE_ENABLE
 
@@ -329,10 +364,13 @@ void mks_servo_set_dir(mks_conf_t mks_config, uint8_t motor_num, uint8_t dir)
  */
 void mks_servo_set_period(uint8_t motor_num, uint64_t period_us)
 {
-    if (period_us < 200)
-        ESP_LOGW(TAG, "low period value - motor may not work properly");
-
     period_us = period_us / 2; // 1 period = 2 gpio switches
+
+    if (period_us == 0)
+    {
+        period_us = 1;
+        ESP_LOGW(TAG, "Period equal 0 - set to 1 us!");
+    }
 
     gptimer_alarm_config_t alarm_config = {
         .alarm_count = period_us,
@@ -340,7 +378,9 @@ void mks_servo_set_period(uint8_t motor_num, uint64_t period_us)
         .flags.auto_reload_on_alarm = true
     };
 
+    portENTER_CRITICAL(&spinlock);
     ESP_ERROR_CHECK(gptimer_set_alarm_action(gptimer[motor_num], &alarm_config));
+    portEXIT_CRITICAL(&spinlock);
 }
 
 
@@ -355,12 +395,16 @@ void mks_servo_start(mks_conf_t mks_config, uint8_t motor_num, bool start)
 {
     if (start == false)
     {
+        portENTER_CRITICAL(&spinlock);
         ESP_ERROR_CHECK(gptimer_stop(gptimer[motor_num]));
+        portEXIT_CRITICAL(&spinlock);
         gpio_set_level(mks_config.step_pin[motor_num], 0);
     }
     else if (start == true)
     {
+        portENTER_CRITICAL(&spinlock);
         ESP_ERROR_CHECK(gptimer_start(gptimer[motor_num]));
+        portEXIT_CRITICAL(&spinlock);
     }
 }
 
@@ -374,25 +418,45 @@ void mks_servo_start(mks_conf_t mks_config, uint8_t motor_num, bool start)
  */
 void mks_servo_step_move(mks_conf_t mks_config, uint8_t motor_num, uint64_t steps, int64_t period_us)
 {
-    // set direction
-    if (period_us < 0)
+    if (steps != 0 && period_us != 0)
     {
-        mks_servo_set_dir(mks_config, motor_num, MKS_CW_DIR);
-        period_us = -period_us;
+        // set direction
+        if (period_us < 0)
+        {
+            mks_servo_set_dir(mks_config, motor_num, MKS_CW_DIR);
+            period_us = -period_us;
+        }
+        else
+            mks_servo_set_dir(mks_config, motor_num, MKS_CCW_DIR);
+
+        // acceleration parameters
+        double v_goal = 1.0f / (double)period_us;
+        double time = (double)(steps * period_us);
+        double t_0 = time * MKS_ACCEL_PER;
+        double accel = v_goal / t_0;
+        double s_0 = accel * t_0 * t_0 / 2.0f;
+        double dt = t_0 / s_0 / s_0;
+        uint64_t period_us_cur = (uint64_t)(s_0 * dt + (double)period_us * (1.0f - 1.0f / s_0));
+
+        portENTER_CRITICAL(&spinlock);
+        cb_arg[motor_num].steps_left = steps;
+        cb_arg[motor_num].steps_total = steps;
+        cb_arg[motor_num].period_goal = period_us;
+
+        cb_arg[motor_num].accel_s = s_0;
+
+        cb_arg[motor_num].dt = dt;
+        cb_arg[motor_num].time_passed = period_us_cur;
+        portEXIT_CRITICAL(&spinlock);
+
+        // set period
+        mks_servo_set_period(motor_num, period_us_cur);
+
+        // start timer and step signal
+        mks_servo_start(mks_config, motor_num, true);
     }
     else
-        mks_servo_set_dir(mks_config, motor_num, MKS_CCW_DIR);
-
-    // set period
-    mks_servo_set_period(motor_num, period_us);
-
-    // set number of steps
-    portENTER_CRITICAL(&spinlock);
-    steps_left[motor_num] = 2 * steps; // 1 period = 2 gpio switches
-    portEXIT_CRITICAL(&spinlock);
-
-    // start timer and step signal
-    mks_servo_start(mks_config, motor_num, true);
+        ESP_LOGW(TAG, "Steps or period equal 0 - no move!");
 }
 
 #endif // MKS_STEP_MODE_ENABLE

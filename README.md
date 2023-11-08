@@ -7,6 +7,7 @@
 * Datasheet claims that maximum speed is 1600 but in reality it is 1279 (see `MKS_MAX_SPEED` in `mks_servo.h`).
 * After reset servo will position itself in local range from -180 to 180 degrees.
 * Every next motor gets next free address in STEP/DIR mode.
+* Set acceleration curve in STEP/DIR mode using `MKS_ACCEL_PER` in `mks_servo.h`.
 
 ## To do list:
 * debug and test
