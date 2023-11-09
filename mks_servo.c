@@ -165,15 +165,9 @@ static bool mks_servo_clk_timer_callback(gptimer_handle_t timer, const gptimer_a
             uint64_t period_cur = arg.period_goal;
 
             if ((double)(arg.steps_total - arg.steps_left) < arg.accel_s) // acceleration
-            {
-                period_cur = (uint64_t)((arg.accel_s - (double)(arg.steps_total - arg.steps_left)) * arg.dt + 
-                                            (double)arg.period_goal * (1.0f - 1.0f / arg.accel_s));
-            }
+                period_cur = (uint64_t)((arg.accel_s - (double)(arg.steps_total - arg.steps_left)) * arg.dt + (double)arg.period_goal);
             else if ((double)arg.steps_left < arg.accel_s) // deceleartion
-            {
-                period_cur = (uint64_t)((arg.accel_s - (double)arg.steps_left) * arg.dt +
-                                            (double)arg.period_goal * (1.0f - 1.0f / arg.accel_s));
-            }
+                period_cur = (uint64_t)((arg.accel_s - (double)arg.steps_left) * arg.dt + (double)arg.period_goal);
 
             if (period_cur < arg.period_goal)
                 period_cur = arg.period_goal;
@@ -183,7 +177,7 @@ static bool mks_servo_clk_timer_callback(gptimer_handle_t timer, const gptimer_a
 
             arg.time_passed += period_cur;
             arg.steps_left--;
-            
+
             portENTER_CRITICAL_ISR(&spinlock);
             cb_arg[arg.motor_num].time_passed = arg.time_passed;
             cb_arg[arg.motor_num].steps_left = arg.steps_left;
@@ -435,8 +429,8 @@ void mks_servo_step_move(mks_conf_t mks_config, uint8_t motor_num, uint64_t step
         double t_0 = time * MKS_ACCEL_PER;
         double accel = v_goal / t_0;
         double s_0 = accel * t_0 * t_0 / 2.0f;
-        double dt = t_0 / s_0 / s_0;
-        uint64_t period_us_cur = (uint64_t)(s_0 * dt + (double)period_us * (1.0f - 1.0f / s_0));
+        double dt = 2.0f * t_0 / s_0 / s_0;
+        uint64_t period_us_cur = (uint64_t)(s_0 * dt + (double)period_us);
 
         portENTER_CRITICAL(&spinlock);
         cb_arg[motor_num].steps_left = steps;
