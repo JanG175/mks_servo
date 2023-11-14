@@ -18,8 +18,6 @@
 #define MKS_STEP_MODE_ENABLE        1 // uncomment to enable step mode
 // #define MKS_PC_RETURN            1 // uncommnent if you want to return message to PC
 
-#define MKS_ACCEL_PER               0.1f // acceleration percentage
-
 // MKS HEAD
 #define MKS_UPLINK_HEAD             0xFA
 #define MKS_DOWNLINK_HEAD           0xFB
@@ -121,7 +119,7 @@ void mks_servo_set_period(uint8_t motor_num, uint64_t period_us);
 
 void mks_servo_start(mks_conf_t mks_conf, uint8_t motor_num, bool start);
 
-void mks_servo_step_move(mks_conf_t mks_conf, uint8_t motor_num, uint64_t steps, int64_t period_us);
+void mks_servo_step_move(mks_conf_t mks_conf, uint8_t motor_num, uint64_t steps, int64_t period_us, float accel_phase);
 
 #endif // MKS_STEP_MODE_ENABLE
 
