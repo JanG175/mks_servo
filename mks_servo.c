@@ -160,7 +160,7 @@ static bool mks_servo_clk_timer_callback(gptimer_handle_t timer, const gptimer_a
 
     if (arg.steps_left > 0)
     {
-        if (gpio_get_level(arg.step_pin) == 0)
+        if (gpio_get_level(arg.step_pin) == 1)
         {
             uint64_t period_cur = arg.period_goal;
 
@@ -183,10 +183,10 @@ static bool mks_servo_clk_timer_callback(gptimer_handle_t timer, const gptimer_a
             cb_arg[arg.motor_num].steps_left = arg.steps_left;
             portEXIT_CRITICAL_ISR(&spinlock);
 
-            gpio_set_level(arg.step_pin, 1);
+            gpio_set_level(arg.step_pin, 0);
         }
         else
-            gpio_set_level(arg.step_pin, 0);
+            gpio_set_level(arg.step_pin, 1);
     }
     else
     {
