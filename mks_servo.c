@@ -396,9 +396,19 @@ void mks_servo_start(mks_conf_t mks_config, uint8_t motor_num, bool start)
     }
     else if (start == true)
     {
-        portENTER_CRITICAL(&spinlock);
-        ESP_ERROR_CHECK(gptimer_start(gptimer[motor_num]));
-        portEXIT_CRITICAL(&spinlock);
+        while (1) // wait for timer to stop
+        {
+            portENTER_CRITICAL(&spinlock);
+            esp_err_t err = gptimer_start(gptimer[motor_num]);
+            portEXIT_CRITICAL(&spinlock);
+
+            if (err == ESP_OK)
+                break;
+            else
+                ESP_LOGE(TAG, "waiting for timer %u to stop...", motor_num);
+
+            vTaskDelay(10 / portTICK_PERIOD_MS);
+        }
     }
 }
 
