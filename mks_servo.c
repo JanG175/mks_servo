@@ -102,7 +102,7 @@ static void mks_servo_uart_recv(mks_conf_t mks_config, uint8_t* datagram, uint8_
     }
     else
     {
-        ESP_LOGE(TAG, "UART read error");
+        // ESP_LOGE(TAG, "UART read error");
 
         for (int i = 0; i < len; i++)
             datagram[i] = 0;
