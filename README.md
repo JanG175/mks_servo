@@ -1,4 +1,4 @@
-# MSK-SERVO57C for ESP32 (ESP-IDF) 
+# MKS SERVO57C for ESP32 (ESP-IDF) 
 
 ## Notes
 * Uncomment `#define MKS_STEP_MODE_ENABLE 1` in `mks_servo.h` in config section to enable step mode.
